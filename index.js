@@ -1,84 +1,54 @@
-const needle = require("needle");
-const cheerio = require("cheerio");
-const ObjectsToCsv = require('objects-to-csv');
-const fs = require('fs');
+const ObjectsToCsv = require("objects-to-csv");
+const Produto = require("./Produto");
+const fs = require("fs/promises");
 
-const url = "https://www.netshoes.com.br/tenis-mizuno-wave-titan-2-preto-2FU-6367-006";
+const PRODUCTS_URL = [
+  "https://www.netshoes.com.br/tenis-mizuno-wave-titan-2-preto-2FU-6367-006",
+  "https://www.netshoes.com.br/creatine-turbo-300g-black-skull-natural-G54-4177-001",
+  "https://www.netshoes.com.br/tenis-adidas-runfalcon-30-masculino-preto+branco-FB8-4501-026",
+  "https://www.netshoes.com.br/tenis-adidas-runfalcon-30-masculino-preto-FB8-4501-006",
+  "https://www.netshoes.com.br/creatina-monohidratada-500g-100-pura-importada-soldiers-nutrition-sem+sabor-I0Y-0012-289"
+];
 
-const scrapedResults = [];
-
-async function scrapedProduct() {
+async function main() {
   try {
-    const response = await needle("get", url);
-
-    const $ = cheerio.load(response.body);
-
-    const title = $("[data-productname]").text();
-
-    const price = $("div.price.price-box > .default-price > span > strong")
-        .text()
-        .replace("R$", "")
-        .trim();
-
-    const description = $("[itemprop='description']").text();
-
-    const images = [];
-    $("[data-swiper-wrapper-thumbs] > li").each((index, element) => {
-      const image = $(element)
-          .find("img")
-          .attr("data-src");
-
-      images.push(image);
+    const produtos = PRODUCTS_URL.map(async (value) => {
+      const produto = new Produto(value);
+      await produto.extrairInformacoes();
+      return produto;
     });
-
-    const attributes = {};
-    $("#features > .attributes > li").each((index, element) => {
-      const resultAttributeTag = $(element)
-          .children("strong")
-          .text();
-
-      const attributeTag = resultAttributeTag.replace(":", "");
-
-      const attributeValue = $(element)
-          .text()
-          .replace(resultAttributeTag, "")
-          .trim();
-
-      attributes[attributeTag] = attributeValue;
-    });
+  
+    const PRODUTOS = await Promise.all(produtos);
     
-    const scrapedResult = { title, price, description, attributes, images };
-
-    scrapedResults.push(scrapedResult);
+    await salvarDadosColetadosCsv(PRODUTOS);
+    await salvarDadosColetadosJson(PRODUTOS);
+    
+    console.log('\x1b[33m', `Quantidade de produtos coletados: ${PRODUTOS.length}`, '\n', '\x1b[0m');
+    
+    console.log('\u001b[34m', "Extração de dados finalizada com sucesso!", '\n', '\x1b[0m');
   } catch (error) {
-    console.error(error);
+    console.error('\u001b[31m', `Erro ao extrair informações do produto: ${error}`, '\n', '\x1b[0m');
   }
-
 }
 
-async function createCsvFile() {
-  const csv = new ObjectsToCsv(scrapedResults);
-
-  await csv.toDisk('./test.csv');
+async function salvarDadosColetadosCsv(dados) {
+  try {
+    const csv = new ObjectsToCsv(dados);
+    await csv.toDisk("./dados_coletados.csv");
+    console.log('\u001b[32m', "Dados coletados gravados com sucesso em CSV!",  '\n', '\x1b[0m');
+  } catch (error) {
+    console.error('\u001b[31m', `Erro ao gravar dados coletados em CSV: ${error}`, '\n', '\x1b[0m');
+  }
 }
 
-async function createJsonFile() {
-  const jsonString = JSON.stringify(scrapedResults, null, 2);
-
-  fs.writeFile('data.json', jsonString, (err) => {
-    if (err) {
-      console.error('Erro ao escrever arquivo:', err);
-    } else {
-      console.log('Arquivo gravado com sucesso!');
-    }
-  });
-}
-
-async function main () {
-  await scrapedProduct();
-  await createCsvFile();
-  await createJsonFile();
+async function salvarDadosColetadosJson(dados) {
+  try {
+    const jsonString = JSON.stringify(dados, null, 2);
+    await fs.writeFile("dados_coletados.json", jsonString);
+    console.log('\u001b[32m', "Dados coletados gravados com sucesso em JSON!", '\n', '\x1b[0m');
+  } catch (error) {
+    console.error('\u001b[31m', `Erro ao gravar dados coletados em JSON: ${error}`, '\n', '\x1b[0m');
+  }
 }
 
 main();
-
